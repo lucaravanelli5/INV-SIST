@@ -1,0 +1,796 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage{amsmath}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+% Atajo para nombres de archivo / codigo con guion bajo
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\fpath}[1]{\texttt{#1}}
+
+% Caja de "ojo / nota"
+\newtcolorbox{nota}{colback=yellow!8,colframe=yellow!55!black,
+  boxrule=0.5pt,arc=2pt,left=6pt,right=6pt,top=4pt,bottom=4pt}
+\newtcolorbox{regla}{colback=red!5,colframe=red!55!black,
+  boxrule=0.6pt,arc=2pt,left=6pt,right=6pt,top=4pt,bottom=4pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\small Manual del tablero de research}
+\lhead{\small Uso personal}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\title{\textbf{Tablero de research personal}\\[3pt]
+\large Manual de uso --- de la puesta en marcha a cada funcionalidad}
+\author{Herramienta personal de apoyo a la decisi\'on}
+\date{Junio de 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\noindent\rule{\textwidth}{0.4pt}
+
+\small
+\textbf{Qu\'e es esto.} Un manual de la herramienta de research que corro localmente
+(Python + Streamlit, base SQLite). Cubre c\'omo ponerla en funcionamiento, qu\'e hace
+cada solapa de la app y para qu\'e sirve cada cosa adentro, y tambi\'en el trabajo que
+queda \emph{fuera} de la app (informes, prompts, daily digest, score de la cartera y
+los archivos de datos). \emph{No es asesoramiento financiero}: las decisiones de
+inversi\'on las tomo yo; la herramienta solo organiza datos y ayuda a razonar ideas.
+\normalsize
+
+\noindent\rule{\textwidth}{0.4pt}
+
+\tableofcontents
+\vspace{0.4cm}
+
+%==============================================================
+\section{Mapa general}
+
+La herramienta tiene dos mitades que conviene tener claras desde el principio:
+
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{La app (el tablero).} Un programa en Python con interfaz web que se
+  abre en el navegador. Tiene seis solapas: \emph{Scorecard}, \emph{Screener},
+  \emph{Precio}, \emph{Bonos}, \emph{Informes} y \emph{Carteras simuladas}. Baja
+  precios y ratios sola, calcula la TIR de los bonos, rankea acciones y sigue
+  carteras simuladas.
+  \item \textbf{El trabajo fuera de la app (en el chat y por terminal).} Ac\'a entra
+  el an\'alisis de prensa y de informes macro (que produce los informes diarios), los
+  prompts reutilizables, el \emph{daily digest} de las carteras, el \emph{score} de
+  una cartera puntual, y el mantenimiento de los archivos de datos (los CSV).
+\end{enumerate}
+
+\noindent\textbf{Piezas de software (todas en la misma carpeta):}
+
+\begin{longtable}{L{4.4cm} L{9.9cm}}
+\toprule
+\textbf{Archivo} & \textbf{Para qu\'e sirve} \\
+\midrule
+\endhead
+\fpath{app.py} & La interfaz (Streamlit). Es lo que se ejecuta para abrir el tablero. \\
+\fpath{portfolio\_research.py} & El motor de datos: base SQLite, descarga de precios y ratios, c\'alculo de TIR/duration/paridad de bonos, scorecard, carteras simuladas, informes. \\
+\fpath{screener\_score.py} & El motor del \emph{score compuesto} 0--10 del screener (6 dimensiones, pesos por estilo y horizonte). \\
+\fpath{score\_cartera.py} & Script de terminal: puntu\'a las acciones de una cartera con el score compuesto. \\
+\fpath{daily\_digest.py} & Script de terminal: resumen diario de las carteras (retorno, alpha, se\~nales). \\
+\fpath{seed\_cartera\_*.py} & Scripts que ``siembran'' carteras simuladas predefinidas. \\
+\fpath{universe\_cedears.csv} & Universo de acciones/CEDEARs ($\sim$200 tickers). \\
+\fpath{ratios\_cedears.csv} & Ratio de conversi\'on CEDEAR por acci\'on (para precios en pesos). \\
+\fpath{universe\_bonds.csv} & Universo de bonos (24: soberanos, BOPREAL y ONs). \\
+\fpath{cashflows.csv} & Flujo de fondos de cada bono (para calcular TIR/duration/paridad). \\
+\fpath{research.db} & La base SQLite. Se crea sola la primera vez; guarda todo lo descargado. \\
+\fpath{informes/} & Carpeta con los informes diarios (\fpath{.md}, opcional \fpath{.pdf}/\fpath{.tex}). \\
+\bottomrule
+\end{longtable}
+
+\begin{regla}
+\textbf{Regla de oro del proyecto:} \emph{nunca inventar datos financieros} (flujos,
+tickers, TIR). Si falta el flujo de un bono nuevo, se pide la captura del Cashflow +
+Datos t\'ecnicos de Balanz y se valida la TIR calculada contra la de Balanz antes de
+confiar. Los scripts de carteras tampoco inventan precios: toman el \'ultimo cierre
+cargado y, si falta, saltean y avisan.
+\end{regla}
+
+%==============================================================
+\section{Puesta en marcha}
+
+\subsection{Requisitos}
+
+Corre todo en Windows, en VS Code, dentro de la carpeta del proyecto:
+
+\begin{quote}
+\fpath{C:\textbackslash\allowbreak Users\textbackslash\allowbreak Luca\textbackslash\allowbreak Desktop\textbackslash\allowbreak INVERSIONES\textbackslash\allowbreak CODIGO\textbackslash}
+\end{quote}
+
+\noindent Hace falta Python instalado y las librer\'ias:
+
+\begin{quote}
+\code{pip install streamlit yfinance pandas numpy}
+\end{quote}
+
+\noindent (Lo ideal es hacerlo dentro de un entorno virtual: \code{python -m venv venv}
+y activarlo, para no mezclar dependencias. Una vez creado, alcanza con activarlo cada
+vez antes de correr la app.)
+
+\subsection{Abrir el tablero}
+
+Desde la terminal, parada en la carpeta del proyecto:
+
+\begin{quote}
+\code{streamlit run app.py}
+\end{quote}
+
+Esto abre el tablero en el navegador (t\'ipicamente \code{http://localhost:8501}). La
+base \fpath{research.db} se crea sola la primera vez (la app llama a \code{init\_db()},
+\code{seed\_recommendations()} y \code{seed\_bonds()} al arrancar). Para cerrar, se
+corta el proceso en la terminal (Ctrl+C).
+
+\subsection{Primera vez: cargar datos}
+
+La base arranca vac\'ia de precios. En la barra de arriba del tablero:
+
+\begin{enumerate}[leftmargin=1.4em]
+  \item Apretar \textbf{``Actualizar precios (universo)''}. Baja el \'ultimo a\~no de
+  cierres de todo el universo, en lotes (de a 40 tickers). Tarda un rato.
+  \item Traer los ratios en tandas: elegir cu\'antos por tanda (campo \emph{``Ratios
+  por tanda''}, por defecto 50) y apretar \textbf{``Traer N ratios''}. Es
+  \emph{reanudable}: se puede cortar y seguir despu\'es; saltea los que ya baj\'o hoy.
+  Repetir hasta llegar a 200/200 (el contador de cobertura est\'a arriba).
+\end{enumerate}
+
+\subsection{Alternativa por terminal}
+
+El motor tambi\'en se maneja sin abrir la app, \'util para automatizar:
+
+\begin{longtable}{L{6.2cm} L{8.1cm}}
+\toprule
+\textbf{Comando} & \textbf{Qu\'e hace} \\
+\midrule
+\endhead
+\code{python portfolio\_research.py update} & Baja precios de todo el universo. \\
+\code{python portfolio\_research.py funds} & Baja ratios (reanudable). \\
+\code{python portfolio\_research.py track} & Imprime el scorecard en la terminal. \\
+\code{python portfolio\_research.py all} & Las tres cosas seguidas. \\
+\bottomrule
+\end{longtable}
+
+%==============================================================
+\section{La barra superior (com\'un a toda la app)}
+
+Arriba de las solapas, siempre visible, est\'a el panel de control de datos:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Cobertura:} ``Universo acciones: N $\cdot$ Ratios cargados: X/N''.
+  Cu\'antos tickers hay y de cu\'antos ya se bajaron ratios.
+  \item \textbf{\rmfamily ``Actualizar precios (universo)'':} baja un a\~no de cierres
+  ajustados de todos los tickers (en lotes de 40). Llena la tabla \code{prices}.
+  \item \textbf{``Ratios por tanda'' + ``Traer N ratios'':} baja los ratios
+  fundamentales de yfinance de a tandas. Reanudable.
+\end{itemize}
+
+\begin{nota}
+Los precios y ratios vienen de \textbf{yfinance} (Yahoo Finance). Es la base de las
+solapas Scorecard, Screener, Precio y Carteras simuladas. Si una solapa muestra
+``todav\'ia no hay precios/ratios'', es porque falta correr estos botones.
+\end{nota}
+
+%==============================================================
+\section{Solapa 1 --- Scorecard}
+
+\textbf{Para qu\'e sirve:} medir, de forma objetiva, c\'omo vienen las recomendaciones
+de analistas que cargo (por ejemplo de Allaria), compar\'andolas contra el mercado
+(SPY) desde la fecha de cada recomendaci\'on.
+
+Cada fila es una recomendaci\'on; las columnas:
+
+\begin{longtable}{L{2.4cm} L{11.7cm}}
+\toprule
+\textbf{Columna} & \textbf{Significado} \\
+\midrule
+\endhead
+Fuente & De qui\'en es la recomendaci\'on (ej.\ ``Allaria CEDEARS''). \\
+Fecha & Fecha de la recomendaci\'on (la ventana de medici\'on arranca ah\'i). \\
+Ticker & La acci\'on recomendada. \\
+PrecioRec & Precio al momento de la recomendaci\'on. \\
+Actual & \'Ultimo precio cargado en la base. \\
+Ret\% & Retorno desde la recomendaci\'on: $(\text{Actual}/\text{PrecioRec}-1)\times100$. \\
+Bench\% & Lo que hizo el SPY en la misma ventana (desde la fecha de la recomendaci\'on). \\
+Alpha\% & Ret\% $-$ Bench\%. Cu\'anto le gan\'o (o perdi\'o) al mercado. \\
+aObj\% & Avance al precio objetivo: qu\'e porcentaje del camino al \emph{target} ya recorri\'o, $\frac{\text{Actual}-\text{PrecioRec}}{\text{Objetivo}-\text{PrecioRec}}\times100$ (s\'olo si la recomendaci\'on ten\'ia objetivo). \\
+\bottomrule
+\end{longtable}
+
+\noindent\textbf{C\'omo se cargan recomendaciones nuevas.} Hoy vienen ``sembradas'' en
+una lista dentro de \fpath{portfolio\_research.py} (\code{SEED\_RECOMMENDATIONS}), que
+se inserta en la tabla \code{recommendations} al arrancar. Para sumar una nueva, se
+agrega una fila a esa lista con el formato
+
+\begin{quote}
+\code{(fuente, fecha, ticker, acci\'on, precio\_al\_llamado, precio\_objetivo)}
+\end{quote}
+
+\noindent y se reinicia la app. El \code{precio\_objetivo}
+puede ir vac\'io si no hay target.
+
+%==============================================================
+\section{Solapa 2 --- Screener}
+
+\textbf{Para qu\'e sirve:} filtrar y rankear el universo de $\sim$200 CEDEARs por
+ratios, con un \emph{score compuesto} que resume la calidad de cada empresa en un
+n\'umero. Es la herramienta para pasar de ``200 acciones'' a una lista corta.
+
+\subsection{El bloque ``Score compuesto''}
+
+Arriba de todo (expander abierto por defecto) se elige con qu\'e \emph{lente} se
+puntu\'a el universo:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Estilo:} \emph{quality, value, GARP, growth, dividend, defensive}.
+  Cambia qu\'e dimensiones pesan m\'as (un perfil \emph{value} prioriza valuaci\'on
+  barata; \emph{growth}, crecimiento y momentum; etc.).
+  \item \textbf{Horizonte:} \emph{long / medium / short-term}. Multiplica los pesos:
+  en \emph{short-term} el momentum pesa mucho m\'as y la calidad menos; en
+  \emph{long-term}, al rev\'es.
+  \item \textbf{Modo:} \emph{Por sector} (recomendado) o \emph{Umbrales absolutos}.
+  Por sector, cada empresa se compara con las de su rubro (un banco con bancos); los
+  sectores con menos de 5 empresas caen a umbrales fijos.
+\end{itemize}
+
+El score se calcula sobre \emph{todo} el universo (para que los percentiles por sector
+usen todos los pares) y agrega la columna de \emph{momentum}. El detalle de c\'omo se
+arma est\'a en la secci\'on~\ref{sec:score}.
+
+\subsection{Canastas tem\'aticas}
+
+Botones de un toque (del informe del 23/06) que filtran el universo a un grupo de
+tickers con los ratios y el orden ya seteados. Por ejemplo ``IA semis \& net'',
+``Megacap de-rating'', ``Bancos AR'', ``O\&G AR'', etc. Los tickers de la canasta que
+no tengan ratios cargados no aparecen (y se avisan abajo). Se quitan con
+``\,Quitar canasta\,''. Para editarlas o agregar nuevas se toca el diccionario
+\code{THEMATIC\_BASKETS} en \fpath{app.py}.
+
+\subsection{Presets y filtros manuales}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Presets} (botones): \emph{Value} (P/E y P/BV bajos), \emph{Calidad}
+  (ROE y margen altos), \emph{Dividendos} (yield m\'inimo) y \emph{Limpiar} (saca
+  todos los filtros). Setean los checks y valores; despu\'es se pueden ajustar a mano.
+  \item \textbf{Filtros manuales:} P/E m\'aximo, P/BV m\'aximo, FV/EBITDA m\'aximo,
+  ROE\% m\'inimo, Margen\% m\'inimo, Div.Yield m\'inimo (en crudo, ej.\ 0,03 = 3\%).
+  Cada uno se activa con su check.
+  \item \textbf{Sector:} multiselecci\'on para quedarse solo con ciertos rubros.
+  \item \textbf{Ordenar por:} Score o cualquier columna num\'erica, ascendente o
+  descendente.
+\end{itemize}
+
+La tabla de abajo muestra cu\'antas empresas pasan los filtros y todas las columnas de
+ratios m\'as el score y sus subcomponentes. Las columnas num\'ericas son: P/E, P/E
+fwd, P/BV, FV/EBITDA, ROE\%, Margen\%, Div.Yield, MktCap, CrecVtas\%, CrecGan\%,
+Deuda/Eq, Liq.Corr y Mom\% (momentum).
+
+\subsection{Qu\'e mide cada columna (en criollo)}
+
+Esta es la gu\'ia de las columnas del screener, pensada para alguien que no viene de
+finanzas. La idea de fondo: cada n\'umero contesta una pregunta distinta sobre la
+empresa. Hay tres familias: \emph{cu\'an cara est\'a} (valuaci\'on), \emph{qu\'e tan
+buena es} (rentabilidad y crecimiento), \emph{qu\'e tan s\'olida es} (solidez), y
+\emph{c\'omo se viene moviendo} (momentum). Ninguna sirve sola; se leen en conjunto.
+
+\subsubsection*{Valuaci\'on: \textquestiondown{}est\'a cara o barata?}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{P/E (precio / ganancias).} Cu\'antos a\~nos de las ganancias
+  \emph{actuales} de la empresa pag\'as al comprar la acci\'on. Un P/E de 20 significa
+  que pag\'as 20 veces lo que la empresa gana en un a\~no. \emph{Por qu\'e lo usamos:}
+  es la vara m\'as r\'apida de ``caro vs.\ barato''. Un P/E bajo puede ser una ganga o
+  una empresa con problemas; uno alto suele reflejar que el mercado espera mucho
+  crecimiento (o que est\'a cara). Solo tiene sentido entre empresas que ganan plata
+  (si la ganancia es negativa, no aplica).
+  \item \textbf{P/E fwd (P/E \emph{forward}, a futuro).} Lo mismo, pero usando las
+  ganancias \emph{estimadas} del pr\'oximo a\~no en lugar de las pasadas. \emph{Por
+  qu\'e lo usamos:} si el P/E fwd es m\'as bajo que el P/E normal, el mercado espera
+  que las ganancias \emph{crezcan} (la misma acci\'on se vuelve ``m\'as barata'' a
+  futuro). Es \'util para no castigar a una empresa que hoy gana poco pero va en
+  subida.
+  \item \textbf{P/BV (precio / valor libros).} Compara el precio de la acci\'on contra
+  el \emph{patrimonio neto contable} de la empresa (lo que valdr\'ia en los papeles si
+  vendiera todo y pagara sus deudas). Un P/BV de 1 significa que cotiza justo a su
+  valor contable; menos de 1, por debajo. \emph{Por qu\'e lo usamos:} es especialmente
+  \'util en bancos y empresas con muchos activos tangibles, donde ``los libros''
+  significan algo concreto. Un P/BV muy bajo puede ser oportunidad o se\~nal de que el
+  mercado desconf\'ia de esos activos.
+  \item \textbf{FV/EBITDA (valor de la empresa / ganancia operativa).} El ``FV'' (valor
+  de la firma) es lo que costar\'ia comprar la empresa entera, contando tambi\'en su
+  deuda; el EBITDA es la ganancia operativa antes de intereses, impuestos y
+  amortizaciones (una medida ``cruda'' de cu\'anto genera el negocio). \emph{Por qu\'e
+  lo usamos:} a diferencia del P/E, este ratio \emph{incluye la deuda}, as\'i que
+  permite comparar de forma m\'as justa empresas con distinto nivel de endeudamiento.
+  Menor = relativamente m\'as barata. Es de los m\'as usados por analistas para comparar
+  entre s\'i.
+\end{itemize}
+
+\subsubsection*{Rentabilidad y crecimiento: \textquestiondown{}qu\'e tan buena es?}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{ROE\% (rentabilidad sobre el patrimonio).} De cada \$100 que pusieron
+  los accionistas, cu\'antos genera la empresa de ganancia al a\~no. Un ROE de 20\%
+  quiere decir \$20 por cada \$100. \emph{Por qu\'e lo usamos:} mide qu\'e tan bien la
+  empresa usa el capital de sus due\~nos. Un ROE alto y \emph{sostenido} es se\~nal de
+  un buen negocio (marca, ventaja competitiva). Ojo: un ROE alt\'isimo a veces viene de
+  mucha deuda, no de calidad; por eso se lee junto a Deuda/Eq.
+  \item \textbf{Margen\% (margen de ganancia neta).} De cada \$100 que la empresa
+  \emph{vende}, cu\'antos le quedan de ganancia limpia despu\'es de todos los costos.
+  \emph{Por qu\'e lo usamos:} mide la eficiencia y el ``poder de fijar precios''. Un
+  margen alto suele indicar que la empresa puede cobrar caro sin que se le escapen los
+  clientes (poca competencia o producto diferenciado). Var\'ia mucho por industria: un
+  supermercado tiene margen fino y un software, margen ancho.
+  \item \textbf{CrecVtas\% (crecimiento de ventas).} Cu\'anto crecieron los ingresos
+  respecto del a\~no anterior. \emph{Por qu\'e lo usamos:} las ventas son la l\'inea
+  ``de arriba'' del negocio; sin crecimiento de ventas, es dif\'icil que crezcan las
+  ganancias de forma sana. Es el term\'ometro de si el negocio se est\'a expandiendo o
+  estancando.
+  \item \textbf{CrecGan\% (crecimiento de ganancias).} Lo mismo, pero en la l\'inea ``de
+  abajo'': cu\'anto crecieron las \emph{ganancias}. \emph{Por qu\'e lo usamos:} al final
+  lo que mueve el precio de una acci\'on en el largo plazo son las ganancias. Que
+  crezcan m\'as r\'apido que las ventas indica que la empresa adem\'as se est\'a
+  volviendo m\'as eficiente. Puede ser irregular a\~no a a\~no (de ah\'i que se mire
+  junto al crecimiento de ventas).
+\end{itemize}
+
+\subsubsection*{Solidez: \textquestiondown{}qu\'e tan s\'olida y segura es?}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Deuda/Eq (deuda sobre patrimonio).} Cu\'anta deuda tiene la empresa por
+  cada \$1 de capital propio. \emph{Por qu\'e lo usamos:} la deuda potencia las
+  ganancias en las buenas, pero hunde a la empresa en las malas. Un valor alto = m\'as
+  riesgo financiero (m\'as sensible a subas de tasas o a una ca\'ida de ventas). Menor
+  es m\'as conservador. Var\'ia por sector (los bancos manejan otra l\'ogica).
+  \item \textbf{Liq.Corr (liquidez corriente).} Cu\'antas veces los activos de corto
+  plazo (caja, cobranzas, inventario) cubren las deudas de corto plazo. \emph{Por qu\'e
+  lo usamos:} responde ``\textquestiondown{}puede pagar lo que vence este a\~no sin ahogarse?''.
+  Por encima de 1 puede cubrir sus pasivos inmediatos; por debajo de 1 podr\'ia tener
+  apreturas de caja. Es un chequeo b\'asico de salud financiera de corto plazo.
+  \item \textbf{MktCap (capitalizaci\'on de mercado).} El valor total de la empresa en
+  bolsa: precio de la acci\'on $\times$ cantidad de acciones. \emph{Por qu\'e lo
+  usamos:} es el ``tama\~no'' de la empresa. Las grandes (\emph{large caps}) suelen ser
+  m\'as estables y predecibles; las chicas (\emph{small caps}), m\'as vol\'atiles, con
+  m\'as potencial de crecimiento pero m\'as riesgo. En el score, el tama\~no se usa como
+  respaldo de la dimensi\'on de solidez cuando faltan los datos de deuda y liquidez.
+\end{itemize}
+
+\subsubsection*{Renta y tendencia}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Div.Yield (rendimiento por dividendos).} El dividendo anual que paga la
+  empresa, como porcentaje del precio de la acci\'on. Un yield de 4\% significa que, si
+  comprs hoy, cobrar\'as $\sim$\$4 al a\~no por cada \$100 invertidos (adem\'as de lo que
+  suba o baje la acci\'on). \emph{Por qu\'e lo usamos:} es la renta ``en efectivo'' del
+  due\~no. Importa sobre todo para un perfil de dividendos. Un yield muy alto puede ser
+  atractivo o una se\~nal de alerta (a veces sube porque la acci\'on se desplom\'o).
+  \item \textbf{Mom\% (momentum, retorno 12--1 meses).} Cu\'anto subi\'o o baj\'o la
+  acci\'on en el \'ultimo a\~no, salteando el \'ultimo mes. \emph{Por qu\'e lo usamos:}
+  hist\'oricamente, lo que viene subiendo tiende a seguir subiendo un tiempo (y
+  viceversa); es el factor ``tendencia''. Se saltea el \'ultimo mes a prop\'osito,
+  porque en plazos muy cortos suele haber rebotes en contra. Pesa mucho en horizontes
+  cortos y poco en los largos (ver el score compuesto).
+\end{itemize}
+
+\begin{nota}
+Ninguna columna alcanza por s\'i sola: un P/E bajo \emph{con} ROE alto y poca deuda es
+muy distinto de un P/E bajo \emph{porque} la empresa est\'a en problemas. El score
+compuesto de la pr\'oxima secci\'on existe justamente para combinarlas en un solo
+n\'umero comparable.
+\end{nota}
+
+\subsection{El score compuesto en detalle}\label{sec:score}
+
+Vive en \fpath{screener\_score.py}. Resume seis dimensiones en un puntaje 0--10
+(en la pr\'actica 1--10) y un \emph{Rating} cualitativo. La idea: pesos base por estilo,
+multiplicados por horizonte, y \emph{renormalizados fila por fila} seg\'un qu\'e datos
+hay (si a una empresa le falta un ratio, esa dimensi\'on queda N/A y los pesos se
+reparten entre las que s\'i tiene; nunca se inventa el dato).
+
+\noindent\textbf{Las seis dimensiones y de d\'onde salen:}
+
+\begin{longtable}{L{2.6cm} L{11.5cm}}
+\toprule
+\textbf{Dimensi\'on} & \textbf{Ratios que usa} \\
+\midrule
+\endhead
+Quality (calidad) & ROE\% y Margen\% (mayor es mejor). \\
+Valuation (valuaci\'on) & P/E (forward si est\'a, si no trailing), P/BV y FV/EBITDA (menor es mejor). \\
+Income (renta) & Div.Yield. \\
+Growth (crecimiento) & CrecVtas\% y CrecGan\%; si faltan, proxy con P/E fwd vs trailing. \\
+Safety (solidez) & Deuda/Eq (menor mejor) y Liq.Corr (mayor mejor); si faltan, tama\~no (MktCap). \\
+Momentum & Retorno 12--1 meses (columna externa, ver abajo). \\
+\bottomrule
+\end{longtable}
+
+\noindent\textbf{Modo ``por sector''.} Cada ratio se convierte en un puntaje 1--10
+seg\'un su \emph{percentil dentro del sector} (si el sector tiene al menos 5 empresas
+v\'alidas). As\'i un P/E de 18 puede ser ``caro'' entre bancos y ``barato'' entre
+tecnol\'ogicas. Si el sector es chico o falta, se usan \emph{umbrales fijos} de
+respaldo.
+
+\noindent\textbf{Rating.} A partir del Score: \emph{Fuerte} ($\geq 7{,}5$),
+\emph{Bueno} ($\geq 5{,}5$), \emph{Regular} ($\geq 3{,}5$), \emph{Flojo} ($<3{,}5$).
+Si la cobertura de datos es baja ($<$ la mitad de las dimensiones) agrega
+``(poca data)''. La columna \emph{Cobertura} muestra cu\'antas dimensiones se pudieron
+calcular (ej.\ 5/6).
+
+\noindent\textbf{Momentum (12--1).} Se calcula desde los precios: retorno entre el
+precio de $\sim$12 meses atr\'as y el de $\sim$1 mes atr\'as (se saltea el \'ultimo
+mes, est\'andar para evitar la reversi\'on de corto plazo). Un ticker necesita al
+menos $\sim$100 ruedas de historia; si no, queda N/A.
+
+\begin{nota}
+El score es un \textbf{ranking heur\'istico sobre datos p\'ublicos}, no un veredicto.
+Sirve para ordenar y comparar dentro del universo, no para decidir solo.
+\end{nota}
+
+%==============================================================
+\section{Solapa 3 --- Precio}
+
+\textbf{Para qu\'e sirve:} ver el gr\'afico hist\'orico de una acci\'on del universo, en
+d\'olares o estimando el precio del CEDEAR en pesos.
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Se elige un ticker (de los que tienen precios descargados) y se ve el cierre
+  ajustado del \'ultimo a\~no.
+  \item \textbf{Modo USD:} precio de la acci\'on subyacente. Si hay ratio cargado,
+  muestra el ratio del CEDEAR (ej.\ ``20:1'').
+  \item \textbf{Modo ARS (CEDEAR estimado):} convierte a pesos con la f\'ormula
+  \[
+    \text{precio CEDEAR} \approx \frac{\text{precio acci\'on (USD)} \times \text{CCL}}{\text{ratio}}
+  \]
+  donde \emph{ratio} = cu\'antos CEDEARs equivalen a una acci\'on (de
+  \fpath{ratios\_cedears.csv}) y el CCL se baja al toque de fuentes p\'ublicas gratis
+  (con bot\'on ``Traer CCL'').
+\end{itemize}
+
+\begin{nota}
+La conversi\'on a pesos usa el \textbf{CCL de hoy} para toda la serie, as\'i que los
+valores de fechas pasadas son orientativos (el CCL de cada d\'ia era distinto).
+Conviene comparar el \'ultimo valor estimado contra el precio de Balanz, no el
+hist\'orico. Si falta el ratio del ticker (puede ser un ADR que se compra local, no
+CEDEAR), muestra en USD y avisa.
+\end{nota}
+
+%==============================================================
+\section{Solapa 4 --- Bonos}
+
+\textbf{Para qu\'e sirve:} seguir 24 bonos argentinos con precio, TIR, paridad y
+duration calculados por la herramienta, m\'as la curva TIR-vs-duration y el riesgo
+pa\'is. El universo: 11 soberanos (6 Globales ley NY + 5 Bonares ley local),
+6 BOPREAL (ley BCRA) y 7 Obligaciones Negociables / ONs (ley NY).
+
+\subsection{C\'omo se actualiza}
+
+El bot\'on \textbf{``Actualizar bonos (precio + TIR)''} hace dos cosas:
+
+\begin{enumerate}[leftmargin=1.4em]
+  \item Baja los precios de \textbf{data912.com} (API p\'ublica gratis, delay
+  $\sim$2\,h), de los paneles \code{arg\_bonds}, \code{arg\_corp} (ONs) y
+  \code{arg\_notes}.
+  \item Calcula \textbf{TIR, duration y paridad} de cada bono que tenga flujo cargado,
+  usando ese precio m\'as el flujo de fondos.
+\end{enumerate}
+
+La leyenda de cobertura indica cu\'antos bonos tienen flujo cargado (\emph{X/24}).
+
+\subsection{La tabla y los gr\'aficos}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Tabla:} Bono, Nombre, Ley, Vence, Precio USD, TIR\%, Paridad\%,
+  Duration y la hora de la \'ultima actualizaci\'on.
+  \item \textbf{Panel completo de data912} (expander): todos los s\'imbolos crudos que
+  devuelve la API, por si hace falta debuguear un precio.
+  \item \textbf{Curva TIR vs duration:} cada punto es un bono. Los que quedan
+  \emph{por encima} de la curva ofrecen m\'as TIR para igual plazo (los relativamente
+  baratos).
+  \item \textbf{Riesgo pa\'is (EMBI):} se baja autom\'aticamente de ArgentinaDatos
+  (gratis, sin clave) con su propio bot\'on; se grafica la serie en puntos b\'asicos.
+\end{itemize}
+
+\subsection{El motor de bonos (c\'omo calcula la TIR)}
+
+Esta es la parte clave: la TIR/paridad/duration \emph{no se bajan de ning\'un lado},
+las calcula la herramienta. La fuente externa s\'olo aporta el \emph{precio}.
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{TIR:} se busca, por bisecci\'on, la tasa que hace que el valor presente
+  de los flujos futuros iguale al precio. Es la tasa interna de retorno del bono al
+  precio de hoy. Se descartan resultados disparatados (fuera del rango
+  $-5\%$ a $60\%$).
+  \item \textbf{Duration:} se reporta la \emph{duration modificada} (Macaulay $/(1+y)$),
+  en a\~nos. Mide la sensibilidad del precio a cambios de tasa.
+  \item \textbf{Paridad:} precio dividido el \emph{valor t\'ecnico} ($\times 100$). El
+  valor t\'ecnico es el capital residual m\'as los intereses corridos del cup\'on en
+  curso (convenci\'on 30/360). Una paridad $<100$ indica que cotiza bajo la par.
+  \item \textbf{Limpieza de precios:} data912 a veces devuelve una cotizaci\'on en
+  pesos en lugar de en d\'olares; el motor descarta los precios implausibles para no
+  ensuciar la tabla ni la curva. El precio de data912 ya viene ``por 100 de nominal
+  original'', la misma base que los flujos, as\'i que se usa crudo.
+\end{itemize}
+
+\begin{regla}
+Para sumar un bono nuevo hace falta su \textbf{flujo de fondos} en
+\fpath{cashflows.csv}. Se saca de las capturas de la pesta\~na Cashflow de Balanz y se
+\textbf{valida}: la TIR que calcula la herramienta tiene que coincidir con la de
+Balanz (siempre dio dentro de 1--3 puntos b\'asicos). Reci\'en ah\'i se conf\'ia. El
+flujo de cada bono se carga una sola vez.
+\end{regla}
+
+%==============================================================
+\section{Solapa 5 --- Informes}
+
+\textbf{Para qu\'e sirve:} tener la bit\'acora de research en un solo lugar, dentro del
+tablero. Es el archivo de los informes diarios que se generan en el chat.
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Los informes viven como archivos \fpath{.md} en la carpeta \fpath{informes/}
+  al lado de la app. El formato principal es Markdown, que se lee \emph{adentro} del
+  tablero (se renderiza). La convenci\'on de nombre es
+  \fpath{informe\_research\_AAAAMMDD.md}.
+  \item Si al lado de un \fpath{.md} hay un \fpath{.pdf} o \fpath{.tex} con el
+  \emph{mismo nombre}, aparecen como botones de descarga.
+  \item \textbf{Subir un informe:} hay un uploader para \fpath{.md}, \fpath{.pdf} o
+  \fpath{.tex}; se guardan en la carpeta autom\'aticamente.
+  \item \textbf{Buscador:} busca un t\'ermino (ej.\ ``GD41'', ``Vaca Muerta'') en el
+  texto de todos los informes y muestra en cu\'ales aparece, con un fragmento.
+  \item \textbf{Selector + lectura:} se elige un informe (el m\'as nuevo primero) y se
+  lee renderizado; abajo est\'an los botones de descarga disponibles.
+\end{itemize}
+
+%==============================================================
+\section{Solapa 6 --- Carteras simuladas}
+
+\textbf{Para qu\'e sirve:} simular carteras de tesis (estilo MarketWatch pero local y
+sin login) y seguir su evoluci\'on. Sirve para poner a prueba las convicciones de los
+informes sin plata real.
+
+\subsection{Gesti\'on de carteras (panel izquierdo)}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Nueva cartera:} nombre, etiqueta opcional (ej.\ ``IA / macro''),
+  fecha de inicio y notas (la tesis resumida).
+  \item \textbf{Listado:} se selecciona una cartera para ver su detalle a la derecha.
+  \item \textbf{Editar / eliminar:} cambiar los metadatos o borrar la cartera (con
+  confirmaci\'on; al borrarla se borran sus posiciones).
+\end{itemize}
+
+\subsection{Detalle de la cartera (panel derecho)}
+
+\textbf{Agregar posici\'on.} Se elige un ticker (de los que tienen precios
+descargados), una fecha de entrada, y se define la posici\'on de una de dos formas:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Por cantidad de acciones} (\emph{shares}), o
+  \item \textbf{Por monto en USD} (la herramienta infiere las acciones impl\'icitas:
+  monto $\div$ precio de entrada).
+\end{itemize}
+
+El \textbf{precio de entrada} se precarga con el cierre de yfinance de la fecha
+elegida (se puede editar, por ejemplo para usar el precio de Balanz). Es el precio del
+\emph{subyacente en USD} (la acci\'on, no el CEDEAR).
+
+\textbf{M\'etricas y tabla.} Arriba: cantidad de posiciones, costo base, valor actual y
+retorno total. La tabla de posiciones muestra, por cada una: Ticker, fecha de entrada,
+shares, costo base, precio de entrada, precio actual, valor en USD, Ret\%, Alpha\%,
+Peso\% y la nota. Definiciones:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Ret\%:} retorno de la posici\'on desde la entrada.
+  \item \textbf{Alpha\%:} Ret\% menos el retorno del SPY en la misma ventana de cada
+  posici\'on.
+  \item \textbf{Peso\%:} valor de la posici\'on sobre el valor total de la cartera.
+\end{itemize}
+
+\textbf{Gr\'afico hist\'orico.} La evoluci\'on del valor de la cartera en USD (semanal
+o diario), con el SPY \emph{normalizado} al valor inicial superpuesto, para comparar
+la evoluci\'on relativa. Abajo, la distribuci\'on del valor por ticker.
+
+\begin{nota}
+Los precios son del subyacente en USD (yfinance), \emph{sin} ajuste de CCL ni ratio
+CEDEAR. La cartera no simula bonos: es de acciones/CEDEARs. Es una simulaci\'on de
+seguimiento de ideas, no asesoramiento.
+\end{nota}
+
+%==============================================================
+\section{Trabajo fuera de la app}
+
+Adem\'as del tablero, hay un flujo de an\'alisis que se hace en el chat y por terminal.
+
+\subsection{Los informes: de d\'onde salen}
+
+El an\'alisis se hace en el chat: le paso prensa (FT / WSJ / Bloomberg) o informes
+macro (JPM / FMI / Banco Mundial / BCRA) y obtengo \emph{candidatos razonados} dentro
+de mi universo. El resultado se vuelca en un informe en Markdown
+(\fpath{informe\_research\_AAAAMMDD.md}), se guarda en la carpeta \fpath{informes/} y se
+lee desde la solapa Informes. Opcionalmente se exporta a \fpath{.pdf} o \fpath{.tex}.
+Los candidatos despu\'es se verifican en el screener (acciones) o en el m\'odulo de
+bonos.
+
+\subsection{Los prompts de an\'alisis}
+
+Est\'an en \fpath{prompts\_analisis.md}, listos para pegar en el chat. Son dos:
+
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{An\'alisis tem\'atico} (prensa $\rightarrow$ CEDEARs). Toma titulares o
+  un art\'iculo y pide: identificar los temas de fondo, mapear la cadena de valor
+  (l\'ogica de ``picos y palas''), traducirlo a tickers \emph{con CEDEAR}, dar la tesis
+  en 1--2 l\'ineas y qu\'e ratios chequear en el screener, y cerrar con una lista corta
+  priorizada y los riesgos en contra.
+  \item \textbf{An\'alisis macro argentino} (informe macro $\rightarrow$ bonos +
+  acciones). Pide resumir los drivers macro, decir qu\'e implican para el riesgo pa\'is
+  (compresi\'on o suba), bajarlo a la curva de bonos (qu\'e tramo se beneficia, por
+  duration/convexidad) y a las acciones argentinas, y cerrar con riesgos.
+\end{enumerate}
+
+Las reglas de ambos prompts son las mismas que rigen el proyecto: no decir
+``comprá'', no inventar tickers ni datos, y ser expl\'icito con la incertidumbre. El
+archivo tambi\'en tiene una tabla para el seguimiento peri\'odico de las carteras.
+
+\subsection{El daily digest}
+
+\fpath{daily\_digest.py} imprime, para cada cartera simulada, un resumen del d\'ia:
+retorno total, alpha vs SPY, mejor y peor posici\'on, y las \emph{se\~nales} de
+disparador que se hayan activado. La idea es correrlo todos los d\'ias y pegar la
+salida en el chat para analizarla.
+
+\noindent\textbf{Uso:} primero actualizar precios (en el tablero o
+\code{python portfolio\_research.py update}), despu\'es \code{python daily\_digest.py}.
+
+\noindent\textbf{Se\~nales (disparadores mec\'anicos, NO \'ordenes).} Cada posici\'on se
+clasifica en un \emph{tier} con su umbral de toma de ganancia (TP) y de revisi\'on de
+stop:
+
+\begin{longtable}{L{4.6cm} L{4.2cm} L{4.6cm}}
+\toprule
+\textbf{Tier} & \textbf{TP / Stop} & \textbf{Qui\'enes} \\
+\midrule
+\endhead
+Core AI-infra & $+25\%$ / $-15\%$ & NVDA, MU, AVGO, AMD, TSM\ldots \\
+Especulativos & $+40\%$ / $-25\%$ & OKLO, ALAB, IREN, CRWV, SMCI \\
+Contrarian Argentina & $+35\%$ / $-20\%$ & YPF, GGAL, BMA, BBAR, PAM, VIST\ldots \\
+\bottomrule
+\end{longtable}
+
+\noindent Si una posici\'on cruza su TP o su stop, el digest la marca para
+\emph{revisar} (no es una orden de compra/venta; la decisi\'on la tomo yo). Los
+umbrales y los tickers de cada tier se editan al principio del script.
+
+\subsection{El score de una cartera}
+
+\fpath{score\_cartera.py} puntu\'a las acciones de una cartera con el mismo score
+compuesto del screener. Corre el scoring sobre \emph{todo} el universo (para que los
+percentiles por sector tengan sentido) y despu\'es muestra solo los tickers de la
+cartera elegida, ordenados por score, con sus subcomponentes (Q/Val/Gro/Saf/Mom) y el
+Rating.
+
+\noindent\textbf{Uso:} \code{python score\_cartera.py "Agresiva 3M jun-26"} (sin
+argumento, lista las carteras disponibles).
+
+\noindent La lente por defecto es \emph{growth / short-term / por sector}, pensada para
+una cartera agresiva de corto plazo (en short-term el momentum pesa m\'as). Si se la
+puntuara con quality/long-term, los nombres agresivos se ver\'ian peor a prop\'osito.
+
+\subsection{Sembrar carteras simuladas}
+
+Hay scripts que crean carteras predefinidas de 100.000 USD a partir de las
+convicciones de los informes, tomando el precio de entrada del \'ultimo cierre cargado
+(no inventan precios; si falta uno, saltean y avisan):
+
+\begin{longtable}{L{5.3cm} L{8.7cm}}
+\toprule
+\textbf{Script} & \textbf{Cartera que crea} \\
+\midrule
+\endhead
+\fpath{seed\_cartera\_simulada.py} & ``Tesis research jun-26'': diversificada (tem\'atico + macro AR), $\sim$20 posiciones (infra de IA, megacap, rotaci\'on c\'iclica, bloque Argentina, algo de China). \\
+\fpath{seed\_cartera\_agresiva.py} & ``Agresiva 3M jun-26'': concentrada en IA-infra, 9 posiciones, m\'as un sleeve contrarian Argentina. \\
+\fpath{seed\_cartera\_agresiva\allowbreak\_cp\_.py} & ``Agresiva 3M jun-26(CP)'': versi\'on revisada con el score compuesto (saca OKLO y CRWV por pre-ingresos, suma TSM). \\
+\bottomrule
+\end{longtable}
+
+\noindent\textbf{Uso:} con precios actualizados, \code{python seed\_cartera\_simulada.py}
+(o el que corresponda). Si ya existe una cartera con ese nombre, avisa y no la
+duplica; para recrearla hay que borrarla primero desde el tablero.
+
+%==============================================================
+\section{Los archivos de datos (CSV)}
+
+Estos cuatro CSV son el ``combustible'' de la herramienta. Se editan a mano para
+mantener los universos.
+
+\begin{longtable}{L{4.0cm} L{10.1cm}}
+\toprule
+\textbf{Archivo} & \textbf{Qu\'e tiene y c\'omo se arma} \\
+\midrule
+\endhead
+\fpath{universe\_cedears.csv} & Una columna \code{ticker}: el universo de
+acciones/CEDEARs ($\sim$200). Editarlo agrega o saca acciones del screener, scorecard
+y carteras. El benchmark SPY se agrega solo. \\
+\addlinespace
+\fpath{ratios\_cedears.csv} & \code{ticker, ratio}: cu\'antos CEDEARs equivalen a una
+acci\'on. Sirve para estimar el precio en pesos (solapa Precio). Se valida contra
+Comafi / BYMA; cambian con los splits. \\
+\addlinespace
+\fpath{universe\_bonds.csv} & \code{ticker, name, currency, law, maturity}: los 24
+bonos (soberanos, BOPREAL, ONs), con su ley y a\~no de vencimiento. \\
+\addlinespace
+\fpath{cashflows.csv} & \code{ticker, date, coupon, amort} \emph{por 100 de valor
+nominal}: el flujo de fondos de cada bono (cup\'on y amortizaci\'on en cada fecha). Es
+lo que permite calcular TIR, duration y paridad. Se saca de las capturas de Balanz y
+se valida contra su TIR (1--3 pb). Cada bono se carga una sola vez. \\
+\bottomrule
+\end{longtable}
+
+\noindent\textbf{C\'omo se calculan (resumen de las fuentes):}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Precios de acciones/CEDEARs y ratios fundamentales:} autom\'aticos de
+  yfinance (botones de la barra superior).
+  \item \textbf{Precios de bonos:} autom\'aticos de data912.com (delay $\sim$2\,h).
+  \item \textbf{TIR / paridad / duration de bonos:} las calcula la herramienta con el
+  flujo (\fpath{cashflows.csv}) m\'as el precio. No se bajan de ning\'un lado.
+  \item \textbf{Riesgo pa\'is:} autom\'atico de ArgentinaDatos.
+  \item \textbf{CCL (para precios en pesos):} autom\'atico de fuentes p\'ublicas
+  (dolarapi / ArgentinaDatos).
+\end{itemize}
+
+\begin{nota}
+Balanz no tiene API y no se scrapea detr\'as del login. Por eso los flujos de bonos se
+cargan a mano desde capturas y se validan. Es la \'unica forma de mantener la regla de
+no inventar datos.
+\end{nota}
+
+%==============================================================
+\section{Rutina y mantenimiento}
+
+\noindent\textbf{D\'ia a d\'ia:}
+\begin{enumerate}[leftmargin=1.4em]
+  \item Abrir el tablero (\code{streamlit run app.py}) y actualizar precios (y bonos /
+  riesgo pa\'is si interesa).
+  \item Correr \code{python daily\_digest.py} y pegar la salida en el chat para
+  revisar las carteras.
+  \item Si hay prensa o informe nuevo, usar el prompt correspondiente, generar el
+  informe \fpath{.md}, guardarlo en \fpath{informes/} y verificar candidatos en el
+  screener / bonos.
+\end{enumerate}
+
+\noindent\textbf{Cada tanto:}
+\begin{itemize}[leftmargin=1.4em]
+  \item Re-traer ratios para que no queden viejos (botón de tandas).
+  \item Sumar un bono: capturar el Cashflow de Balanz, cargarlo en
+  \fpath{cashflows.csv}, actualizar bonos y validar la TIR contra Balanz.
+  \item Revisar los ratios de CEDEARs si hubo splits.
+\end{itemize}
+
+\vspace{0.4cm}
+\noindent\rule{\textwidth}{0.4pt}
+
+\small
+\textbf{Recordatorio.} Todo lo anterior es una herramienta personal de apoyo a la
+decisi\'on. \emph{No es asesoramiento financiero.} Las se\~nales del digest son
+disparadores mec\'anicos para revisar, no \'ordenes; el score del screener es un
+ranking heur\'istico; y las carteras simuladas son simulaciones. Las decisiones de
+inversi\'on las tomo yo.
+\normalsize
+
+\end{document}
