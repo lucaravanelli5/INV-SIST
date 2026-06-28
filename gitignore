@@ -1,0 +1,40 @@
+# --- Base de datos local (datos personales / generados) ---
+research.db
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Capturas de Balanz y datos sensibles ---
+capturas/
+screenshots/
+*_balanz.png
+
+# --- Entornos virtuales de Python ---
+venv/
+.venv/
+env/
+ENV/
+
+# --- Cache de Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Streamlit ---
+.streamlit/secrets.toml
+
+# --- Editor / SO ---
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# --- LaTeX (productos de compilación; dejá los .tex y, si querés, el .pdf final) ---
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
