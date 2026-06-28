@@ -24,9 +24,9 @@ import time
 from datetime import datetime
 
 DB_PATH = "research.db"
-UNIVERSE_FILE = "universe_cedears.csv"
-UNIVERSE_BONDS_FILE = "universe_bonds.csv"
-CASHFLOWS_FILE = "cashflows.csv"
+UNIVERSE_FILE = "data/universe_cedears.csv"
+UNIVERSE_BONDS_FILE = "data/universe_bonds.csv"
+CASHFLOWS_FILE = "data/cashflows.csv"
 BENCHMARK = "SPY"
 
 # Watchlist mínima de respaldo si no está el CSV del universo.
@@ -654,7 +654,7 @@ def cashflow_coverage():
 # El precio del CEDEAR en pesos = precio de la acción (USD) * CCL / ratio.
 # 'ratio' = cuántos CEDEARs equivalen a 1 acción (X en "X:1"); para "1:Y" es 1/Y.
 # Los ratios se editan en RATIOS_FILE (validá contra Comafi/BYMA; cambian por splits).
-RATIOS_FILE = "ratios_cedears.csv"
+RATIOS_FILE = "data/ratios_cedears.csv"
 
 
 def load_cedear_ratios():
