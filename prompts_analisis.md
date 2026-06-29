@@ -6,6 +6,21 @@ después en el screener / módulo de bonos del tablero.
 
 ---
 
+## 0) Rutina diaria (esto es lo que mando cada día)
+
+Adjunto al chat un .zip con toda la data del día + pego abajo la salida de
+daily_digest.py. Mensaje que acompaña: 
+Te adjunto un .zip con la data del día (prensa internacional y/o outlooks de casas, y a veces algún informe macro AR) y abajo pego la salida de daily_digest.py (precios ya actualizados). Hacé un informe diario en Markdown con el formato del proyecto (informe_research_AAAAMMDD.md, fecha = la del material):
+Abrí el .zip e inventariá cada archivo; si alguno está escaneado, OCRizalo.
+Clasificá cada fuente como TEMÁTICA o MACRO ARGENTINA. No inventes el contenido de un archivo que no puedas leer: avisame.
+PARTE A: aplicá el prompt (1) temático a las fuentes internacionales.
+PARTE B: si hay informe AR-específico, aplicá el prompt (2) macro argentino.
+Si NO hay, hacé solo lectura de backdrop global (USD, tasas US, oil, EM) y decí explícitamente que no hay driver AR nuevo y que NO movés la tesis de la curva con este lote.
+PARTE C: armá el seguimiento de carteras con el digest de abajo (ver formato más abajo en este archivo).
+DIGEST DE HOY:
+[pego la salida de daily_digest.py]
+
+
 ## 1) Análisis temático (prensa: FT / WSJ / Bloomberg → CEDEARs)
 
 Para cuando traigo titulares, un artículo o notas de prensa y quiero candidatos
@@ -14,7 +29,7 @@ dentro de mi universo de CEDEARs.
 ```
 Sos mi asistente de research para una cartera PERSONAL de CEDEARs (invierto
 desde Argentina; solo puedo comprar lo que tiene CEDEAR). Abajo te pego
-titulares, un artículo o mis notas de prensa (FT / WSJ / Bloomberg).
+titulares, un artículo o mis notas de prensa u outlooks de casas (FT / WSJ / Bloomberg, o gestoras tipo JPM / Invesco / DB / HSBC / Standard Chartered).
 
 Tu tarea:
 1. Identificá los 2–4 temas o tendencias DE FONDO que aparecen (no la noticia
@@ -74,12 +89,16 @@ INFORME:
 ```
 
 ## Seguimiento de carteras simuladas (al AAAA-MM-DD)
+(se arma con la salida de daily_digest.py; precios ya actualizados)
 
 | Cartera | Inicio | Retorno | SPY (ventana) | Alpha | Mejor / Peor |
 |---|---|---|---|---|---|
 | Tesis research jun-26 | 2026-06-26 | +X% | +Y% | +Z% | TCK / TCK |
 | Agresiva 3M jun-26    | 2026-06-26 | +X% | +Y% | +Z% | TCK / TCK |
 
-**Lectura:** ¿el alpha es positivo? ¿qué tesis está funcionando, la diversificada o la agresiva?
-**Señales del día:** (TP/STOP que disparó el digest)
-**Decisión (la tomo yo):** qué hago, si algo.
+**Evolución (vs. informe anterior):** ¿el alpha mejora o empeora día a día? ¿qué
+posición es el driver/drag persistente? ¿qué tesis gana en el tiempo, la
+diversificada o la agresiva?
+**Lectura del día:** ¿qué tesis del Parte A se reflejó hoy en las carteras?
+**Señales (TP/STOP):** las que marcó el digest (no son órdenes).
+**Decisión (la tomo yo):** qué miro; nada mecánico.
