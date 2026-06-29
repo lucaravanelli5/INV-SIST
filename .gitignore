@@ -5,7 +5,7 @@ cartera_personal.csv
 
 # Python / sistema
 *.pyc
-
+*.bak
 
 # --- Base de datos local (datos personales / generados) ---
 research.db

@@ -278,11 +278,11 @@ def fundamentals_df():
     if not df.empty:
         for col in ("roe", "profit_margin", "revenue_growth", "earnings_growth"):
             if col in df:
-                df[col] = (df[col] * 100).round(1)
+                df[col] = (pd.to_numeric(df[col], errors="coerce") * 100).round(1)
         for col in ("pe", "forward_pe", "pb", "ev_ebitda",
                     "debt_to_equity", "current_ratio"):
             if col in df:
-                df[col] = df[col].round(2)
+                df[col] = pd.to_numeric(df[col], errors="coerce").round(2)
         df = df.rename(columns={
             "ticker": "Ticker", "name": "Empresa", "sector": "Sector",
             "market_cap": "MktCap", "pe": "P/E", "forward_pe": "P/E fwd",
