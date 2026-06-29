@@ -1,3 +1,12 @@
+# Datos personales (NO subir)
+private/
+cartera_personal.csv
+
+
+# Python / sistema
+*.pyc
+
+
 # --- Base de datos local (datos personales / generados) ---
 research.db
 *.db
