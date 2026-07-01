@@ -19,6 +19,8 @@ import datetime as _dt
 import streamlit as st
 import portfolio_research as pr
 import screener_score as sc
+import tecnico
+
 
 st.set_page_config(page_title="Research personal", layout="wide")
 pr.init_db()
@@ -46,9 +48,9 @@ with c2:
 with c3:
     st.info("1ª vez: actualizá precios y traé ratios en tandas hasta 200/200.")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
     ["📋 Scorecard", "🔎 Screener", "💹 Precio", "🇦🇷 Bonos", "📄 Informes",
-     "📁 Carteras simuladas"])
+     "📁 Carteras simuladas", "📈 Técnico"])
 
 # --- Tab 1: scorecard --------------------------------------------------------
 with tab1:
@@ -724,3 +726,8 @@ with tab6:
                     list(val_by_ticker.items()), columns=["Ticker", "Valor USD"]
                 ).sort_values("Valor USD", ascending=False)
                 st.bar_chart(pie_df.set_index("Ticker"), height=220)
+# =============================================================================
+# --- Tab 7: TÉCNICO / TENDENCIA ----------------------------------------------
+# =============================================================================
+with tab7:
+    tecnico.render()

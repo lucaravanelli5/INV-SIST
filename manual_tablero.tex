@@ -613,6 +613,154 @@ seguimiento de ideas, no asesoramiento.
 \end{nota}
 
 %==============================================================
+\section{Solapa 7 --- T\'ecnico / Tendencia}
+
+\textbf{Para qu\'e sirve:} mirar el \emph{mismo} universo de $\sim$200 CEDEARs con
+una segunda lente. Donde el \emph{Screener} pregunta ``\,\emph{es buena y barata esta
+empresa?}\,'' (fundamental), esta solapa pregunta ``\,\emph{la tendencia me
+acompa\~na?}\,'' (t\'ecnico). No reemplaza al research fundamental: lo complementa,
+aportando el \emph{cu\'ando} adem\'as del \emph{qu\'e}. El motor es el m\'odulo
+\fpath{tecnico.py}; la solapa se dibuja llamando a \code{tecnico.render()} desde
+\fpath{app.py}.
+
+\subsection{En qu\'e se basa}
+
+La metodolog\'ia es el an\'alisis de etapas de \textbf{Stan Weinstein} con contexto de
+\textbf{Wyckoff} (el mismo sistema que usa un conocido, adaptado a nuestro universo y
+a nuestra regla de no inventar datos). Las ideas centrales:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Stage Analysis (Weinstein).} Todo activo atraviesa cuatro etapas:
+  \emph{Base} (1), \emph{Avance} (2), \emph{Techo} (3) y \emph{Declive} (4). Solo
+  interesa operar LONG en \emph{Stage~2}. La referencia es la media m\'ovil
+  \emph{ponderada} (WMA): posici\'on del precio respecto de la WMA + pendiente de la
+  WMA definen la etapa.
+  \item \textbf{Dos horizontes.} El semanal (WMA de 30 semanas, cl\'asico de
+  Weinstein) y el diario (WMA de 20 ruedas). Cuando los dos coinciden en Stage~2 con
+  fuerza relativa positiva, la se\~nal es m\'as robusta (\emph{convergencia}).
+  \item \textbf{Fuerza relativa (RS).} Cu\'anto le gana (o pierde) el papel al SPY en
+  la misma ventana. Es la misma idea del alpha del Scorecard, pero sistematizada
+  ticker por ticker.
+  \item \textbf{Gesti\'on por ATR.} El \emph{Average True Range} (volatilidad real)
+  fija stop y objetivos proporcionales a cu\'anto se mueve cada papel, en vez de
+  porcentajes fijos arbitrarios.
+\end{itemize}
+
+\subsection{De d\'onde salen los datos}
+
+Todo se \emph{calcula} a partir del OHLCV (apertura/m\'aximo/m\'inimo/cierre/volumen)
+real que baja yfinance. La tabla \code{prices} del resto del tablero guarda solo el
+cierre, que no alcanza para el ATR ni el ratio de volumen; por eso esta solapa se baja
+su propio OHLCV y lo \emph{cachea} en \fpath{research.db} en tablas nuevas
+(\code{ohlc\_tec} y \code{ohlc\_tec\_meta}), \emph{separadas} de las que ya existen.
+La solapa no toca nada del tablero anterior: si un d\'ia no gusta, se borra el bloque
+\code{tab7} de \fpath{app.py} y el archivo \fpath{tecnico.py}, y todo queda igual.
+
+\begin{regla}
+\textbf{Regla de oro, respetada:} no se inventan datos. Si a un ticker le falta OHLCV
+o historia suficiente (una WMA30 semanal necesita $\sim$34 semanas), se \emph{saltea}
+y se avisa cu\'antos quedaron afuera --- igual que hacen los scripts de carteras.
+\end{regla}
+
+\subsection{C\'omo se usa}
+
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{La 1\raisebox{0.4ex}{a} vez, apretar ``\,Bajar / actualizar OHLCV del
+  universo\,''.} Descarga el OHLCV diario ($\sim$2 a\~nos) de todo el universo en
+  lotes. Tarda un rato. Es reanudable: en corridas del mismo d\'ia saltea lo ya
+  bajado.
+  \item \textbf{``\,Recalcular tabla\,''} rehace el scan sin volver a bajar datos
+  (\'util si cambiaste el universo).
+  \item \textbf{Filtros:} \emph{Solo convergentes} (Stage~2 en semanal y diario +
+  RS$>$0), \emph{Solo Stage~2 diario}, o \emph{Solo con volumen} $\ge 1.5\times$.
+  \item \textbf{Calculadora de sizing} (abajo): se cargan capital, precio, stop,
+  riesgo y tope, y devuelve el tama\~no de posici\'on.
+\end{enumerate}
+
+\subsection{Qu\'e dice cada columna}
+
+Cada fila es un ticker del universo. Las columnas y su interpretaci\'on:
+
+\begin{longtable}{L{3.0cm} L{11.3cm}}
+\toprule
+\textbf{Columna} & \textbf{Qu\'e es / c\'omo se calcula} \\
+\midrule
+\endhead
+Precio & \'Ultimo cierre diario (yfinance, ajustado). \\
+\addlinespace
+Stage\_sem / Stage\_d\'ia & Etapa de Weinstein en semanal (WMA30) y diario (WMA20):
+\emph{1 Base} $\cdot$ \emph{2 Early} $\cdot$ \emph{2 Avance} $\cdot$ \emph{3 Techo}
+$\cdot$ \emph{4 Declive}. Solo se opera LONG en Stage~2. \\
+\addlinespace
+RS\_sem / RS\_d\'ia & Fuerza relativa vs SPY (en puntos \%): $r_{\text{papel}} -
+r_{\text{SPY}}$ sobre la ventana del horizonte (26 semanas / 63 ruedas). Positiva =
+le gana al mercado. \\
+\addlinespace
+Conv \raisebox{-0.2ex}{$\star$} & Convergencia: Stage~2 en \emph{ambos} horizontes y
+RS$>$0 en ambos. La se\~nal m\'as robusta del sistema. \\
+\addlinespace
+ATR\_d\'ia & \emph{Average True Range} de 14 ruedas. Base de stop y objetivos. \\
+\addlinespace
+Stop / TP1 / TP2 & Niveles por ATR diario: Stop $=$ precio $-$ ATR$\times1.5$; TP1 $=$
+precio $+$ ATR$\times2.5$; TP2 $=$ precio $+$ ATR$\times4.0$. (En el horizonte semanal
+los multiplicadores son $2.0 / 3.5 / 5.5$.) Son referencias de riesgo, no \'ordenes. \\
+\addlinespace
+DistStop\% & Cu\'anto caer\'ia el precio hasta el stop: $(\text{precio}-\text{stop}) /
+\text{precio}\times100$. \\
+\addlinespace
+VolRatio & Volumen de hoy $\div$ promedio de 20 ruedas. $\ge 1.5\times$ confirma la
+se\~nal; $<1\times$ = movimiento sin respaldo. \\
+\addlinespace
+Setup & Texto \emph{para revisar} (no una orden): marca convergentes, convergentes con
+volumen OK, o Stage~2 diario. \\
+\bottomrule
+\end{longtable}
+
+\noindent\textbf{C\'omo se detecta el Stage.} A partir de dos n\'umeros: la posici\'on
+del precio respecto de la WMA (en \%) y la pendiente de la WMA (en \%, sobre las
+\'ultimas barras). Los umbrales son los del manual de Weinstein: pendiente ``plana''
+$\pm0.3\%$ y precio ``alrededor de'' la WMA $\pm3\%$.
+
+\begin{quote}
+\emph{Stage~2 Avance}: precio por encima y pendiente $>+0.3\%$.\quad
+\emph{Stage~2 Early}: reci\'en por encima, momentum a\'un tibio.\\
+\emph{Stage~4 Declive}: precio por debajo y pendiente $<-0.3\%$.\quad
+\emph{Stage~1 Base}: plano en ambos.\quad
+\emph{Stage~3 Techo}: el resto.
+\end{quote}
+
+\noindent La WMA (ponderada lineal) da m\'as peso a lo reciente:
+$\text{WMA}_n = \frac{\sum_{i=1}^{n} i\cdot P_i}{\sum_{i=1}^{n} i}$, con $P_n$ el
+precio m\'as reciente.
+
+\subsection{La calculadora de sizing}
+
+Da el tama\~no de posici\'on por \emph{riesgo fijo} --- nunca por ``cu\'anto creo que
+va a subir''. La p\'erdida m\'axima que se acepta es fija (por defecto 2\% del
+capital); lo que var\'ia es cu\'anto se puede invertir seg\'un d\'onde est\'e el stop,
+acotado por un tope de diversificaci\'on (10\% del capital). Se invierte el
+\emph{menor} de los dos:
+
+\begin{quote}
+$\text{capital a invertir} = \min\!\left(\dfrac{\text{capital}\times 2\%}{\text{dist.
+al stop}},\ \ \text{capital}\times 10\%\right)$
+\end{quote}
+
+\noindent Ejemplo (capital \$20.000.000, precio \$14.000, stop \$13.100 $\to$ dist.
+6,4\%): el riesgo permite $\$400.000 / 0{,}064 \approx \$6{,}2$M, pero el tope de
+diversificaci\'on son \$2M, as\'i que \emph{manda diversificaci\'on} y se invierten
+\$2M. Es aritm\'etica pura: no usa ni inventa datos de mercado.
+
+\begin{nota}
+\textbf{Advertencias (lo que la solapa NO dice).} El Stage es una simplificaci\'on
+fiel de los umbrales de Weinstein, pero no detecta las fases finas de Wyckoff (el
+\emph{Spring} y compa\~n\'ia). El Stage y la RS describen el pasado reciente: son
+\emph{contexto}, no predicci\'on. Y todo est\'a enmarcado como el resto del proyecto:
+los \emph{setups} dicen ``revisar'', no ``comprar''. \emph{No es asesoramiento
+financiero}; las decisiones las tomo yo.
+\end{nota}
+
+%==============================================================
 \section{Trabajo fuera de la app}
 
 Adem\'as del tablero, hay un flujo de an\'alisis que se hace en el chat y por terminal.
